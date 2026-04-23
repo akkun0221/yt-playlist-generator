@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-options';
+import { withAuth, handleYouTubeError } from '@/lib/api-helpers';
+import { env } from '@/lib/env';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: '未認証' }, { status: 401 });
-  }
-
-  try {
+  return withAuth(async (session) => {
     const { title, description } = await request.json();
 
     if (!title) {
@@ -19,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/playlists?part=snippet,status&key=${process.env.YOUTUBE_API_KEY}`,
+      `https://www.googleapis.com/youtube/v3/playlists?part=snippet,status&key=${env.YOUTUBE_API_KEY}`,
       {
         method: 'POST',
         headers: {
@@ -39,21 +34,10 @@ export async function POST(request: NextRequest) {
     );
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error('YouTube API エラー詳細:', JSON.stringify(err, null, 2));
-      return NextResponse.json(
-        { error: err.error?.message || `プレイリスト作成エラー: ${res.status}` },
-        { status: res.status }
-      );
+      return handleYouTubeError(res, 'プレイリスト作成エラー');
     }
 
     const data = await res.json();
     return NextResponse.json({ id: data.id, title: data.snippet.title });
-  } catch (error) {
-    console.error('プレイリスト作成エラー:', error);
-    return NextResponse.json(
-      { error: 'プレイリスト作成中にエラーが発生しました' },
-      { status: 500 }
-    );
-  }
+  });
 }

@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-options';
+import { withAuth, handleYouTubeError } from '@/lib/api-helpers';
+import { env } from '@/lib/env';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: '未認証' }, { status: 401 });
-  }
-
-  try {
+  return withAuth(async (session) => {
     const { playlistId, videoId } = await request.json();
 
     if (!playlistId || !videoId) {
@@ -19,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&key=${process.env.YOUTUBE_API_KEY}`,
+      `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&key=${env.YOUTUBE_API_KEY}`,
       {
         method: 'POST',
         headers: {
@@ -39,20 +34,10 @@ export async function POST(request: NextRequest) {
     );
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: err.error?.message || `動画追加エラー: ${res.status}` },
-        { status: res.status }
-      );
+      return handleYouTubeError(res, '動画追加エラー');
     }
 
     const data = await res.json();
     return NextResponse.json({ id: data.id });
-  } catch (error) {
-    console.error('動画追加エラー:', error);
-    return NextResponse.json(
-      { error: '動画追加中にエラーが発生しました' },
-      { status: 500 }
-    );
-  }
+  });
 }

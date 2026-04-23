@@ -9,8 +9,8 @@ import {
   addVideoToPlaylist,
   containsJapanese,
 } from '@/lib/youtube-api';
-import { filterNewVideos, recordUsedVideos } from '@/lib/history-db';
-import { QuotaExceededError } from '@/lib/rate-limiter';
+import { recordUsedVideos } from '@/lib/history-db';
+import { QuotaExceededError } from '@/lib/errors';
 
 // Fisher-Yates シャッフル
 function shuffle<T>(array: T[]): T[] {

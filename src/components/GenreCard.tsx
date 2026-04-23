@@ -2,6 +2,7 @@
 
 import type { GenreProgress } from '@/types';
 import { ProgressBar } from './ProgressBar';
+import { CheckIcon } from './icons';
 
 interface GenreCardProps {
   progress: GenreProgress;
@@ -34,8 +35,7 @@ export function GenreCard({
   onToggle,
   disabled,
 }: GenreCardProps) {
-  const { genre, status, songsAdded, totalSongs, error } =
-    progress;
+  const { genre, status, songsAdded, totalSongs, error } = progress;
 
   const handleCardClick = () => {
     if (disabled) return;
@@ -73,21 +73,7 @@ export function GenreCard({
                   : 'border-gray-600 bg-gray-800'
               } ${disabled ? 'opacity-50' : ''}`}
             >
-              {isSelected && (
-                <svg
-                  className="h-full w-full p-0.5 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={3}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              )}
+              {isSelected && <CheckIcon className="h-full w-full p-0.5 text-white" />}
             </div>
             <div>
               <h3 className="font-bold text-white">{genre.name}</h3>

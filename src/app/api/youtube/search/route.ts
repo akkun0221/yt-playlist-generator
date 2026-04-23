@@ -1,30 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-options';
+import { NextRequest } from 'next/server';
+import { withAuth, handleYouTubeError } from '@/lib/api-helpers';
+import { env } from '@/lib/env';
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.accessToken) {
-    return NextResponse.json({ error: '未認証' }, { status: 401 });
-  }
+  return withAuth(async (session) => {
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get('query');
+    const maxResults = searchParams.get('maxResults') || '25';
+    const relevanceLanguage = searchParams.get('relevanceLanguage') || '';
 
-  const { searchParams } = new URL(request.url);
-  const query = searchParams.get('query');
-  const maxResults = searchParams.get('maxResults') || '25';
-  const relevanceLanguage = searchParams.get('relevanceLanguage') || '';
+    if (!query) {
+      const { NextResponse } = await import('next/server');
+      return NextResponse.json({ error: 'query パラメータが必要です' }, { status: 400 });
+    }
 
-  if (!query) {
-    return NextResponse.json({ error: 'query パラメータが必要です' }, { status: 400 });
-  }
-
-  try {
     const params = new URLSearchParams({
       part: 'snippet',
       q: query,
       type: 'video',
       videoCategoryId: '10', // Music カテゴリ
       maxResults,
-      key: process.env.YOUTUBE_API_KEY!,
+      key: env.YOUTUBE_API_KEY,
     });
 
     if (relevanceLanguage) {
@@ -41,21 +37,11 @@ export async function GET(request: NextRequest) {
     );
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error('YouTube API エラー詳細:', JSON.stringify(err, null, 2));
-      return NextResponse.json(
-        { error: err.error?.message || `YouTube API エラー: ${res.status}` },
-        { status: res.status }
-      );
+      return handleYouTubeError(res, '検索エラー');
     }
 
+    const { NextResponse } = await import('next/server');
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
-    console.error('YouTube検索エラー:', error);
-    return NextResponse.json(
-      { error: '検索中にエラーが発生しました' },
-      { status: 500 }
-    );
-  }
+  });
 }
