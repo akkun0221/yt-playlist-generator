@@ -2,6 +2,19 @@ import { NextRequest } from 'next/server';
 import { withAuth, handleYouTubeError } from '@/lib/api-helpers';
 import { env } from '@/lib/env';
 
+/** ISO 8601 duration (PT#H#M#S) を秒数に変換 */
+function parseDurationToSeconds(duration: string): number {
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const hours = parseInt(match[1] || '0', 10);
+  const minutes = parseInt(match[2] || '0', 10);
+  const seconds = parseInt(match[3] || '0', 10);
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+/** 動画の最大許容時間（秒） — 10分 */
+const MAX_DURATION_SECONDS = 10 * 60;
+
 export async function GET(request: NextRequest) {
   return withAuth(async (session) => {
     const { searchParams } = new URL(request.url);
@@ -14,7 +27,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'query パラメータが必要です' }, { status: 400 });
     }
 
-    const params = new URLSearchParams({
+    // --- 1. search.list で候補動画を取得 ---
+    const searchP = new URLSearchParams({
       part: 'snippet',
       q: query,
       type: 'video',
@@ -24,11 +38,11 @@ export async function GET(request: NextRequest) {
     });
 
     if (relevanceLanguage) {
-      params.set('relevanceLanguage', relevanceLanguage);
+      searchP.set('relevanceLanguage', relevanceLanguage);
     }
 
-    const res = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?${params}`,
+    const searchRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/search?${searchP}`,
       {
         headers: {
           Authorization: `Bearer ${session.accessToken}`,
@@ -36,12 +50,65 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    if (!res.ok) {
-      return handleYouTubeError(res, '検索エラー');
+    if (!searchRes.ok) {
+      return handleYouTubeError(searchRes, '検索エラー');
     }
 
+    const searchData = await searchRes.json();
+    const items = searchData.items || [];
+
+    if (items.length === 0) {
+      const { NextResponse } = await import('next/server');
+      return NextResponse.json({ items: [] });
+    }
+
+    // --- 2. videos.list で動画の再生時間を取得 ---
+    const videoIds = items
+      .map((item: { id: { videoId?: string } }) => item.id?.videoId)
+      .filter(Boolean)
+      .join(',');
+
+    const videosP = new URLSearchParams({
+      part: 'contentDetails',
+      id: videoIds,
+      key: env.YOUTUBE_API_KEY,
+    });
+
+    const videosRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?${videosP}`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+        },
+      }
+    );
+
+    if (!videosRes.ok) {
+      // 再生時間の取得に失敗した場合はフィルタなしで返す
+      console.warn('videos.list 取得失敗: フィルタなしで返します');
+      const { NextResponse } = await import('next/server');
+      return NextResponse.json(searchData);
+    }
+
+    const videosData = await videosRes.json();
+
+    // 10分以内の動画IDセットを作成
+    const shortVideoIds = new Set<string>();
+    for (const v of videosData.items || []) {
+      const durationSec = parseDurationToSeconds(v.contentDetails?.duration || '');
+      if (durationSec > 0 && durationSec <= MAX_DURATION_SECONDS) {
+        shortVideoIds.add(v.id);
+      }
+    }
+
+    // --- 3. 検索結果を再生時間でフィルタ ---
+    const filteredItems = items.filter(
+      (item: { id: { videoId?: string } }) =>
+        item.id?.videoId && shortVideoIds.has(item.id.videoId)
+    );
+
     const { NextResponse } = await import('next/server');
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json({ ...searchData, items: filteredItems });
   });
 }
+
