@@ -64,7 +64,9 @@ export function usePlaylistGenerator(
       try {
         updateProgress(genre.id, { status: 'searching' });
 
-        // 1. 候補動画を検索
+        // 1. 候補動画を検索（補充用に多めに取得）
+        const POOL_MULTIPLIER = 3;
+        const targetPoolSize = SONGS_PER_GENRE * POOL_MULTIPLIER;
         const allCandidates: { videoId: string; title: string; channelTitle: string }[] = [];
 
         for (const query of genre.searchQueries) {
@@ -88,7 +90,7 @@ export function usePlaylistGenerator(
             }
           }
 
-          if (allCandidates.length >= SONGS_PER_GENRE) break;
+          if (allCandidates.length >= targetPoolSize) break;
         }
 
         if (allCandidates.length === 0) {
@@ -99,25 +101,33 @@ export function usePlaylistGenerator(
           return;
         }
 
-        const selectedVideos = allCandidates.slice(0, SONGS_PER_GENRE);
-
-        // 2. 共通プレイリストに動画追加
+        // 2. 共通プレイリストに動画追加（失敗時は候補プールから補充）
         updateProgress(genre.id, { status: 'adding', playlistId });
         const addedIds: string[] = [];
+        let candidateIndex = 0;
 
-        for (let i = 0; i < selectedVideos.length; i++) {
+        while (
+          addedIds.length < SONGS_PER_GENRE &&
+          candidateIndex < allCandidates.length
+        ) {
           if (abortRef.current) break;
-          const video = selectedVideos[i];
+          const video = allCandidates[candidateIndex];
+          candidateIndex++;
+
           try {
             await addVideoToPlaylist(playlistId, video.videoId);
             addedIds.push(video.videoId);
             updateProgress(genre.id, {
-              songsAdded: i + 1,
+              songsAdded: addedIds.length,
             });
           } catch (err) {
             // クォータ超過は即座に上位に伝播
             if (err instanceof QuotaExceededError) throw err;
-            console.warn(`動画追加スキップ: ${video.videoId}`, err);
+            console.warn(
+              `動画追加スキップ（補充候補で再試行）: ${video.videoId}`,
+              err
+            );
+            // → ループ継続で次の候補を試行
           }
         }
 
