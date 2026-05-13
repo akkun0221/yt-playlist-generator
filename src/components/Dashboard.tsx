@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signIn } from 'next-auth/react';
 import { Header } from './Header';
 import { HeroSection } from './HeroSection';
 import { StatsBar } from './StatsBar';
@@ -57,8 +57,21 @@ export function Dashboard() {
         {/* 認証前 */}
         {!session && <HeroSection />}
 
+        {/* トークンリフレッシュ失敗時の再ログイン促進 */}
+        {session?.error === 'RefreshAccessTokenError' && (
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-300">
+            <span>ログインの有効期限が切れました。再度ログインしてください。</span>
+            <button
+              onClick={() => signIn('google')}
+              className="ml-4 rounded bg-yellow-500 px-3 py-1 text-xs font-semibold text-gray-900 hover:bg-yellow-400"
+            >
+              再ログイン
+            </button>
+          </div>
+        )}
+
         {/* 認証後 */}
-        {session && (
+        {session && session.error !== 'RefreshAccessTokenError' && (
           <>
             <StatsBar
               isLoading={isLoading}
