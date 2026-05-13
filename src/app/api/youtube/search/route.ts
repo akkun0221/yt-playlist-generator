@@ -112,9 +112,6 @@ export async function GET(request: NextRequest) {
       // 非公開動画を除外
       if (status.privacyStatus === 'private') continue;
 
-      // 埋め込み不可の動画を除外
-      if (status.embeddable === false) continue;
-
       // 日本でリージョン制限されている動画を除外
       const regionRestriction = v.contentDetails?.regionRestriction;
       if (regionRestriction) {
