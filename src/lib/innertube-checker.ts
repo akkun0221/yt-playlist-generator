@@ -54,12 +54,12 @@ export async function filterPlayableOnYTMusic(
           );
           return null;
         } catch (err) {
-          // チェック失敗時は安全側に倒して除外
+          // チェック自体が失敗した場合は除外せず通す（判定不能 = 許容）
           console.warn(
-            `[InnerTube] チェック失敗: ${videoId}`,
+            `[InnerTube] チェック失敗（通過扱い）: ${videoId}`,
             err instanceof Error ? err.message : err
           );
-          return null;
+          return videoId;
         }
       })
     );

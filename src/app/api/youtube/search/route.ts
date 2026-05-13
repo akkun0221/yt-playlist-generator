@@ -60,6 +60,8 @@ export async function GET(request: NextRequest) {
     const searchData = await searchRes.json();
     const items = searchData.items || [];
 
+    console.log(`[Search] query="${query}" search.list結果: ${items.length}件`);
+
     if (items.length === 0) {
       const { NextResponse } = await import('next/server');
       return NextResponse.json({ items: [] });
@@ -124,16 +126,24 @@ export async function GET(request: NextRequest) {
       playableVideoIds.add(v.id);
     }
 
+    console.log(`[Search] videos.list後の候補: ${playableVideoIds.size}件`);
+
     // --- 3. YouTube Music での再生可否チェック (InnerTube MUSIC クライアント) ---
     const candidateIds = Array.from(playableVideoIds);
     let ytMusicPlayableIds: Set<string>;
     try {
       ytMusicPlayableIds = await filterPlayableOnYTMusic(candidateIds);
+      // 全件除外された場合はフィルタなし結果にフォールバック（InnerTube誤判定対策）
+      if (ytMusicPlayableIds.size === 0 && candidateIds.length > 0) {
+        console.warn('[InnerTube] 全件除外されたためフォールバック');
+        ytMusicPlayableIds = playableVideoIds;
+      }
     } catch (err) {
-      // InnerTube チェック全体が失敗した場合は既存フィルタ結果をフォールバックとして使用
       console.warn('[InnerTube] チェック全体失敗、既存フィルタのみ適用:', err);
       ytMusicPlayableIds = playableVideoIds;
     }
+
+    console.log(`[Search] InnerTube後の候補: ${ytMusicPlayableIds.size}件`);
 
     // --- 4. 検索結果を全フィルタで絞り込み ---
     const filteredItems = items.filter(
